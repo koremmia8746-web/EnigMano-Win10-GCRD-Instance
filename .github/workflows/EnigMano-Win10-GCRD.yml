@@ -72,7 +72,7 @@ jobs:
             if ($env:RETRIES_INPUT) { try { $retries = [int]$env:RETRIES_INPUT } catch {} }
             $dlAttempts = [Math]::Max(3, $retries)
 
-            # Fake User-Agent to help with other downloads
+            # User-Agent for better download stability
             $headers = @{
                 "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             }
@@ -80,8 +80,7 @@ jobs:
             $assets = @(
               @{ Url = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"; Name = "crdhost.msi" },
               @{ Url = "https://downloads.cloudflareclient.com/v1/download/windows/ga"; Name = "Cloudflare_WARP_x64.msi" },
-              # 🔽 SKIPPED: VB-Audio Cable (Causes connection refused errors)
-              # @{ Url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip"; Name = "VBCABLE.zip" },
+              # Audio driver REMOVED entirely
               @{ Url = "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-user"; Name = "VisualStudio.exe" },
               @{ Url = "https://nodejs.org/dist/v24.11.0/node-v24.11.0-x64.msi"; Name = "node-v24.msi" }
             )
@@ -122,22 +121,38 @@ jobs:
           }
 
           try {
+            $scriptName = "EnigMano-GCRD-Instance.ps1"
             $url = "https://gitlab.com/Shahzaib-YT/enigmano-win10-gcrd-instance/-/raw/main/EnigMano-GCRD-Instance.ps1"
-            Invoke-WebRequest -Uri $url -OutFile "EnigMano-GCRD-Instance.ps1" -Headers $headers -UseBasicParsing -TimeoutSec 120
+            
+            Write-Host "⬇️ Downloading script..."
+            Invoke-WebRequest -Uri $url -OutFile $scriptName -Headers $headers -UseBasicParsing -TimeoutSec 120
 
-            if (-not (Test-Path -LiteralPath "./EnigMano-GCRD-Instance.ps1")) {
-              Write-Error "❌ Failed to download EnigMano-GCRD-Instance.ps1"
+            if (-not (Test-Path -LiteralPath $scriptName)) {
+              Write-Error "❌ Failed to download $scriptName"
               exit 1
             }
 
-            powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-GCRD-Instance.ps1" `
+            # -----------------------------------------------------------
+            # 🩹 HOT-PATCH: DISABLE AUDIO ERROR
+            # We read the script and replace the fatal error command with a warning.
+            # -----------------------------------------------------------
+            Write-Host "🩹 Patching script to ignore missing audio drivers..."
+            $content = Get-Content $scriptName -Raw
+            # Replaces 'Fail "Phase Audio...' with 'Write-Warning "Skipping Audio...'
+            # This prevents the script from stopping when it can't find VBCABLE.zip
+            $content = $content -replace 'Fail "Phase Audio', 'Write-Warning "⚠️ Skipped Audio (Patched by Workflow)'
+            Set-Content -Path $scriptName -Value $content
+            # -----------------------------------------------------------
+
+            Write-Host "🚀 Executing patched script..."
+            powershell.exe -ExecutionPolicy Bypass -File ".\$scriptName" `
               -Code        ($env:RAW_CODE) `
               -Pin         ($env:PIN_INPUT) `
               -Retries     ($env:RETRIES_INPUT) `
               -GateSecret ($env:EnigMano_Access_Token)
               
             Write-Host "==============================================="
-            Write-Host "🪄 EnigMano Windows 10 (Sound Disabled via Workflow)"
+            Write-Host "🪄 EnigMano Windows 10 (Sound Disabled)"
             Write-Host "🪄 Powered by: Shahzaib-YT"
             Write-Host "==============================================="
           } catch {
