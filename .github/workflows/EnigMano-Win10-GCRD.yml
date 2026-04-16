@@ -1,161 +1,93 @@
-name: "⚡ EnigMano — GCRD Automation"
+name: "🪄 Imad Khan — 10x Instant RDP"
 
 on:
   workflow_dispatch:
     inputs:
-      CODE:
-        description: "Full headless command or just the 4/... token from https://remotedesktop.google.com/headless (Windows)."
+      CODE1:
+        description: "RDP Code 1"
+        required: false
+      CODE2:
+        description: "RDP Code 2"
+        required: false
+      CODE3:
+        description: "RDP Code 3"
+        required: false
+      CODE4:
+        description: "RDP Code 4"
+        required: false
+      CODE5:
+        description: "RDP Code 5"
+        required: false
+      CODE6:
+        description: "RDP Code 6"
+        required: false
+      CODE7:
+        description: "RDP Code 7"
+        required: false
+      CODE8:
+        description: "RDP Code 8"
+        required: false
+      CODE9:
+        description: "RDP Code 9"
+        required: false
+      CODE10:
+        description: "RDP Code 10"
+        required: false
+      SHARED_PIN:
+        description: "Shared PIN (6+ digits)"
         required: true
-      PIN:
-        description: "CRD PIN (6+ digits). Default 123456"
-        required: false
         default: "123456"
-      RETRIES:
-        description: "Retries for start-host (default 3)"
-        required: false
-        default: "3"
-
-permissions:
-  contents: read
-
-concurrency:
-  group: crd-register-${{ github.ref }}-${{ github.run_id }}
-  cancel-in-progress: false
 
 jobs:
-  crd-register:
-    name: "🪄 EnigMano Windows 10"
+  worker-rdp:
+    name: "🚀 Worker-${{ matrix.id }}"
     runs-on: windows-2022
+    timeout-minutes: 340
+    strategy:
+      matrix:
+        id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      fail-fast: false
 
     env:
-      RAW_CODE:      ${{ github.event.inputs.CODE }}
-      PIN_INPUT:     ${{ github.event.inputs.PIN }}
-      RETRIES_INPUT: ${{ github.event.inputs.RETRIES }}
-      BRANCH:        ${{ github.ref_name }}
-      RUNNER_ENV:    "hosted"
-      EnigMano_Access_Token: ${{ secrets.EnigMano_Access_Token }}
-
-    defaults:
-      run:
-        shell: pwsh
+      MY_CODE: ${{ github.event.inputs[format('CODE{0}', matrix.id)] }}
+      MY_PIN: ${{ github.event.inputs.SHARED_PIN }}
 
     steps:
-      - name: "🔧 Environment Summary (with quiet preload)"
+      - name: "🔍 Validate Worker"
+        id: check
+        shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-          Write-Host "==============================================="
-          Write-Host "💻 OS Version        : $env:ImageOS"
-          Write-Host "🧠 Runner Machine    : $env:RUNNER_NAME"
-          Write-Host "🏷️ Repository        : $env:GITHUB_REPOSITORY"
-          Write-Host "🌿 Branch/Ref        : $env:BRANCH"
-          Write-Host "🔁 Workflow Run ID   : $env:GITHUB_RUN_ID"
-          Write-Host "==============================================="
-
-          if ($env:RAW_CODE)  { Write-Host "::add-mask::$($env:RAW_CODE)" }
-          if ($env:PIN_INPUT) { Write-Host "::add-mask::$($env:PIN_INPUT)" }
-
-          if (-not $env:EnigMano_Access_Token) {
-            Write-Error "❌ Missing required repository secret: EnigMano_Access_Token"
-            exit 1
-          }
-          Write-Host "::add-mask::$($env:EnigMano_Access_Token)"
-          Write-Host "🔐 Gate secret present: yes"
-
-          try {
-            $userDownloads = Join-Path $env:USERPROFILE 'Downloads'
-            if (-not (Test-Path $userDownloads)) { New-Item -ItemType Directory -Path $userDownloads | Out-Null }
-
-            $retries = 3
-            if ($env:RETRIES_INPUT) { try { $retries = [int]$env:RETRIES_INPUT } catch {} }
-            $dlAttempts = [Math]::Max(3, $retries)
-
-            # User-Agent for better download stability
-            $headers = @{
-                "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-
-            $assets = @(
-              @{ Url = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"; Name = "crdhost.msi" },
-              @{ Url = "https://downloads.cloudflareclient.com/v1/download/windows/ga"; Name = "Cloudflare_WARP_x64.msi" },
-              # Audio driver REMOVED entirely
-              @{ Url = "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-user"; Name = "VisualStudio.exe" },
-              @{ Url = "https://nodejs.org/dist/v24.11.0/node-v24.11.0-x64.msi"; Name = "node-v24.msi" }
-            )
-
-            function Download-Quiet([string]$Url,[string]$OutFile,[int]$Attempts,[hashtable]$Headers) {
-              for ($i=1; $i -le $Attempts; $i++) {
-                try {
-                  Invoke-WebRequest -Uri $Url -OutFile $OutFile -Headers $Headers -UseBasicParsing -TimeoutSec 120
-                  if ((Test-Path -LiteralPath $OutFile) -and ((Get-Item $OutFile).Length -gt 0)) { return }
-                  throw "Downloaded file missing or zero-size."
-                } catch {
-                  if ($i -eq $Attempts) { throw }
-                  Write-Warning "Attempt $i failed for $OutFile. Retrying..."
-                  Start-Sleep -Seconds ([int][Math]::Min(20, ($i * 2)))
-                }
-              }
-            }
-
-            foreach ($a in $assets) {
-              $dest = Join-Path $userDownloads $a.Name
-              Download-Quiet -Url $a.Url -OutFile $dest -Attempts $dlAttempts -Headers $headers
-            }
-
-            Write-Host "📁 Save location: $userDownloads"
-          } catch {
-            Write-Error "❌ Preload failed: $($_.Exception.Message)"
+          if (-not $env:MY_CODE) {
+            Write-Host "⚠️ Slot empty. Skipping..."
+            echo "skip=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "skip=false" >> $env:GITHUB_OUTPUT
           }
 
-      - name: "🌟 EnigMano Magical Setup & Execution"
-        id: setup
+      - name: "🌐 Instant RDP Launch"
+        if: steps.check.outputs.skip == 'false'
+        shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Write-Host "🚀 Deploying GCRD Engine..."
+          Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "crd.msi" -UseBasicParsing
+          Start-Process msiexec.exe -ArgumentList "/i", "crd.msi", "/qn", "/norestart" -Wait
+          
+          $authCode = if ($env:MY_CODE -match '--code="([^"]+)"') { $matches[1] } else { $env:MY_CODE }
+          $hostStarter = "C:\Program Files (x86)\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+          
+          & $hostStarter --code="$authCode" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name="Worker-${{ matrix.id }}" --pin=$env:MY_PIN
+          Write-Host "✅ Worker-${{ matrix.id }} is ONLINE."
 
-          $headers = @{
-              "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          }
-
-          try {
-            $scriptName = "EnigMano-GCRD-Instance.ps1"
-            $url = "https://gitlab.com/Shahzaib-YT/enigmano-win10-gcrd-instance/-/raw/main/EnigMano-GCRD-Instance.ps1"
-            
-            Write-Host "⬇️ Downloading script..."
-            Invoke-WebRequest -Uri $url -OutFile $scriptName -Headers $headers -UseBasicParsing -TimeoutSec 120
-
-            if (-not (Test-Path -LiteralPath $scriptName)) {
-              Write-Error "❌ Failed to download $scriptName"
-              exit 1
-            }
-
-            # -----------------------------------------------------------
-            # 🩹 HOT-PATCH: DISABLE AUDIO ERROR
-            # We read the script and replace the fatal error command with a warning.
-            # -----------------------------------------------------------
-            Write-Host "🩹 Patching script to ignore missing audio drivers..."
-            $content = Get-Content $scriptName -Raw
-            # Replaces 'Fail "Phase Audio...' with 'Write-Warning "Skipping Audio...'
-            # This prevents the script from stopping when it can't find VBCABLE.zip
-            $content = $content -replace 'Fail "Phase Audio', 'Write-Warning "⚠️ Skipped Audio (Patched by Workflow)'
-            Set-Content -Path $scriptName -Value $content
-            # -----------------------------------------------------------
-
-            Write-Host "🚀 Executing patched script..."
-            powershell.exe -ExecutionPolicy Bypass -File ".\$scriptName" `
-              -Code        ($env:RAW_CODE) `
-              -Pin         ($env:PIN_INPUT) `
-              -Retries     ($env:RETRIES_INPUT) `
-              -GateSecret ($env:EnigMano_Access_Token)
-              
-            Write-Host "==============================================="
-            Write-Host "🪄 EnigMano Windows 10 (Sound Disabled)"
-            Write-Host "🪄 Powered by: Shahzaib-YT"
-            Write-Host "==============================================="
-          } catch {
-            Write-Error "⚠️ EnigMano-GCRD-Instance.ps1 execution error: $($_.Exception.Message)"
-            exit 1
+      - name: "⏳ Mission Clock (340 Mins)"
+        if: steps.check.outputs.skip == 'false'
+        shell: pwsh
+        run: |
+          Write-Host "==============================================="
+          Write-Host "👤 OWNER: Imad Khan"
+          Write-Host "🆔 ID: Worker-${{ matrix.id }}"
+          Write-Host "==============================================="
+          for ($i=1; $i -le 340; $i++) {
+              if ($i -eq 330) { Write-Host "✋ RELAY TRIGGER: 10m left." }
+              if ($i -eq 335) { shutdown /s /f /t 0 }
+              Start-Sleep -Seconds 60
           }
